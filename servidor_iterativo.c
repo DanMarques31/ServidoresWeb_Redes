@@ -1,126 +1,158 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#include <stdio.h> // Biblioteca padrão in and out
+#include <stdlib.h> // Utilidade geral 
+#include <string.h> // Manipulações de string
+#include <sys/socket.h> // Programação de sockets
+#include <arpa/inet.h> // Funções para manipulação de endereços IP
+#include <unistd.h> // Fornece acesso ao SO para leitura e escrita de sockets
+#include <fcntl.h> // Bibliotecas para manipulação, obtenção e descritores de arquivos
+#include <sys/stat.h>
 
-#define PORT 8080
+#define PORTA 8080
+#define TAMANHO_BUFFER 1024
 
-void send_file(int socket, char *path, char *content_type) {
-    // Abre o arquivo
-    FILE *file = fopen(path, "r");
+// Função para enviar uma resposta HTTP ao cliente
+void enviar_resposta(int socket_cliente, const char *conteudo, size_t tamanho, const char *tipo) {
+    
+    char resposta[TAMANHO_BUFFER];
+    snprintf(resposta, TAMANHO_BUFFER,
+             "HTTP/1.1 200 OK\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %zu\r\n"
+             "\r\n",
+             tipo, tamanho);
 
-    if (file != NULL) {
-        // Lê o conteúdo do arquivo
-        fseek(file, 0, SEEK_END);
-        long file_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        char *file_content = (char *)malloc(file_size + 1);
-        fread(file_content, 1, file_size, file);
-        fclose(file);
-
-        // Responde com o conteúdo do arquivo
-        char header[1024];
-        sprintf(header, "HTTP/1.1 200 OK\nContent-Type: %s\n\n", content_type);
-        write(socket, header, strlen(header));
-        write(socket, file_content, file_size);
-
-        free(file_content);
-    } else {
-        // Responde com um erro 404 se o arquivo não for encontrado
-        write(socket, "HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n<html><body>Arquivo não encontrado</body></html>", 88);
-    }
+    write(socket_cliente, resposta, strlen(resposta));
+    write(socket_cliente, conteudo, tamanho);
 }
 
-void handle_client(int socket) {
-    char buffer[1024];
-    int bytes_read;
+// Função para lidar com uma requisição HTTP
+void lidar_com_requisicao(int socket_cliente, const char *caminho) {
+    
+    char caminho_completo[TAMANHO_BUFFER];
+    snprintf(caminho_completo, TAMANHO_BUFFER, "./site/%s", caminho);
 
-    // Lê a requisição do cliente
-    bytes_read = read(socket, buffer, sizeof(buffer));
-
-    if (bytes_read < 0) {
-        perror("read");
-        exit(1);
-    }
-
-    // Verifica se a leitura do socket foi bem-sucedida
-    if (bytes_read == 0) {
+    int fd = open(caminho_completo, O_RDONLY);
+    
+    if (fd == -1) {
+        perror("Erro ao abrir o arquivo");
+        const char *mensagem = "404 Not Found";
+        enviar_resposta(socket_cliente, mensagem, strlen(mensagem), "text/plain");
         return;
     }
 
-    // Imprime a requisição do cliente
-    printf("Requisição recebida:\n%s\n", buffer);
+    struct stat stat_buffer;
+    fstat(fd, &stat_buffer);
 
-    // Verifica o caminho da requisição
-    char *method = strtok(buffer, " ");
-    char *path = strtok(NULL, " ");
+    // Determina o tipo de conteúdo com base na extensão do arquivo
+    const char *tipo;
+    if (strstr(caminho_completo, ".html")) {
+        tipo = "text/html";
+    } 
+    
+    else if (strstr(caminho_completo, ".webp")) {
+        tipo = "image/webp";
+    } 
+    
+    else {
+        tipo = "text/plain";
+    }
 
-    if (strcmp(method, "GET") == 0) {
-        if (strcmp(path, "/") == 0) {
-            send_file(socket, "site/teste.html", "text/html");
-        } else if (strcmp(path, "/site/appa cabelin.webp") == 0) {
-            send_file(socket, "site/appa cabelin.webp", "image/webp");
-        } else {
-            // Responde com um erro 404 para qualquer outro caminho
-            write(socket, "HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n<html><body>Página não encontrada</body></html>", 68);
+    enviar_resposta(socket_cliente, NULL, stat_buffer.st_size, tipo);
+
+    // Envia o conteúdo do arquivo para o cliente
+    char buffer[TAMANHO_BUFFER];
+    ssize_t lidos, enviados;
+    
+    while ((lidos = read(fd, buffer, sizeof(buffer))) > 0) {
+        
+        enviados = write(socket_cliente, buffer, lidos);
+        
+        if (enviados != lidos) {
+            perror("Erro ao enviar dados");
+            exit(EXIT_FAILURE);
         }
     }
 
-    // Fecha o socket
-    close(socket);
+    // Fecha o arquivo
+    close(fd);
 }
 
 int main() {
-    
-    int my_socket, new_socket;
+
+    int socket_server, socket_cliente;
     struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[TAMANHO_BUFFER];
 
-    // Cria o socket
-    my_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (my_socket < 0) {
-        perror("socket");
-        exit(1);
+    // Criação do socket do servidor
+    if ((socket_server = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Falha na criação do socket");
+        exit(EXIT_FAILURE);
     }
 
-    // Configura o socket para permitir o reuso da porta
-    int opt = 1;
-    if (setsockopt(my_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    // Configuração do socket para permitir o reuso da porta
+    int opcao = 1;
+    if (setsockopt(socket_server, SOL_SOCKET, SO_REUSEADDR, &opcao, sizeof(opcao))) {
         perror("setsockopt");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
-    // Associa o socket a uma porta
+    // Configuração do endereço do servidor
     address.sin_family = AF_INET;
-    address.sin_port = htons(PORT);
     address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORTA);
 
-    if (bind(my_socket, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("bind");
-        exit(1);
+    // Vinculação do socket à porta 8080
+    if (bind(socket_server, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Falha na vinculação do socket à porta");
+        exit(EXIT_FAILURE);
     }
 
-    // Coloca o socket em modo de escuta
-    if (listen(my_socket, 10) < 0) {
-        perror("listen");
-        exit(1);
+    // Aguarda conexões
+    if (listen(socket_server, 1) < 0) {
+        perror("Erro ao aguardar conexões");
+        exit(EXIT_FAILURE);
     }
 
-    // Loop principal
+    printf("Aguardando conexões...\n");
+
     while (1) {
-        // Aceita uma nova conexão
-        new_socket = accept(my_socket, NULL, NULL);
-
-        if (new_socket < 0) {
-            perror("accept");
-            exit(1);
+        // Aceita a conexão do cliente
+        if ((socket_cliente = accept(socket_server, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+            perror("Erro ao aceitar conexão");
+            exit(EXIT_FAILURE);
         }
 
-        // Encaminha a conexão para a função handle_client
-        handle_client(new_socket);
+        // Lê a requisição do cliente
+        int bytes_lidos = read(socket_cliente, buffer, sizeof(buffer));
+
+        // Verifica se a leitura foi bem-sucedida
+        if (bytes_lidos <= 0) {
+            // Erro ou conexão fechada
+            close(socket_cliente);
+            printf("Conexão fechada\n");
+            continue;
+        }
+
+        // Adiciona um caractere nulo no final da string para garantir que seja uma string válida
+        buffer[bytes_lidos] = '\0';
+
+        // Extrai o caminho da requisição
+        char caminho[TAMANHO_BUFFER];
+        if (sscanf(buffer, "GET %s", caminho) == 1) {
+            // Lida com a requisição com base no caminho
+            lidar_com_requisicao(socket_cliente, caminho + 1);  // Ignora a barra inicial no caminho
+        } 
+        
+        else {
+            // Requisição inválida
+            const char *mensagem = "400 Bad Request";
+            enviar_resposta(socket_cliente, mensagem, strlen(mensagem), "text/plain");
+        }
+
+        // Fecha o socket do cliente após enviar a resposta
+        close(socket_cliente);
+        printf("Conexão fechada\n");
     }
 
     return 0;
