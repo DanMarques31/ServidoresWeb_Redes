@@ -208,3 +208,13 @@ void *lidar_com_requisicaoTHREADS(void *arg) {
 
     return NULL;
 }
+
+// Função para reutilizar a porta e não dar o erro "address already in use"
+void reutilizaPorta(socket_server) {
+    
+    int opcao = 1;
+    if (setsockopt(socket_server, SOL_SOCKET, SO_REUSEADDR, &opcao, sizeof(opcao))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+}

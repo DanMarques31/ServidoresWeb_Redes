@@ -1,98 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/select.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/time.h>
-
-#define PORTA 8080
-#define TAMANHO_BUFFER 1024
-#define MAX_CLIENTES 5000
-
-// Função para enviar uma resposta HTTP ao cliente
-void enviar_resposta(int socket_cliente, const char *conteudo, size_t tamanho, const char *tipo) {
-    char resposta[TAMANHO_BUFFER];
-    
-    snprintf(resposta, TAMANHO_BUFFER,
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: %s\r\n"
-            "Content-Length: %zu\r\n"
-            "\r\n",
-            tipo, tamanho);
-
-    // Imprime o cabeçalho HTTP da resposta
-    printf("Resposta enviada:\n%s", resposta);
-
-    write(socket_cliente, resposta, strlen(resposta));
-    write(socket_cliente, conteudo, tamanho);
-}
-
-// Função para obter o tipo MIME com base na extensão do arquivo
-const char *obter_tipo_mime(const char *caminho) {
-    const char *extensao = strrchr(caminho, '.');
-    
-    if (extensao != NULL) {
-        // Incrementa para ignorar o ponto na extensão
-        extensao++;
-
-        if (strcmp(extensao, "html") == 0) {
-            return "text/html";
-        } 
-        else if (strcmp(extensao, "webp") == 0) {
-            return "image/webp";
-        }
-        // Adicione mais tipos conforme necessário
-    }
-
-    // Tipo MIME padrão
-    return "application/octet-stream";
-}
-
-// Função para lidar com uma requisição HTTP
-void lidar_com_requisicao(int socket_cliente, const char *caminho) {
-    char caminho_completo[TAMANHO_BUFFER];
-    snprintf(caminho_completo, TAMANHO_BUFFER, "./site/%s", caminho);
-
-    int descritor_arq = open(caminho_completo, O_RDONLY);
-    
-    if (descritor_arq == -1) {
-        perror("Erro ao abrir o arquivo");
-        const char *mensagem = "404 Not Found";
-        enviar_resposta(socket_cliente, mensagem, strlen(mensagem), "text/plain");
-        return;
-    }
-
-    struct stat stat_buffer;
-    fstat(descritor_arq, &stat_buffer);
-
-    const char *tipo = obter_tipo_mime(caminho_completo);
-
-    enviar_resposta(socket_cliente, NULL, stat_buffer.st_size, tipo);
-
-    char buffer[TAMANHO_BUFFER];
-    ssize_t lidos, enviados;
-    
-    while ((lidos = read (descritor_arq, buffer, sizeof(buffer))) > 0) {
-        
-        enviados = write(socket_cliente, buffer, lidos);
-        
-        if (enviados != lidos) {
-            perror("Erro ao enviar dados");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    close(descritor_arq);
-    close(socket_cliente);
-}
+#include "servers_func.h"
 
 int main() {
+
     int socket_server, socket_cliente[MAX_CLIENTES];
     fd_set conjunto_sockets;
     int max_descritor, descritor_atual;
@@ -105,11 +14,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    int opcao = 1;
-    if (setsockopt(socket_server, SOL_SOCKET, SO_REUSEADDR, &opcao, sizeof(opcao))) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
+    // Função para reutilizar a porta e não dar o erro "address already in use"
+    reutilizaPorta(socket_server);
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;

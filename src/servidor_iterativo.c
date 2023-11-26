@@ -15,11 +15,7 @@ int main() {
     }
 
     // Função para reutilizar a porta e não dar o erro "address already in use"
-    int opcao = 1;
-    if (setsockopt(socket_server, SOL_SOCKET, SO_REUSEADDR, &opcao, sizeof(opcao))) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
+    reutilizaPorta(socket_server);
 
     // Configuração do endereço do socket, endereço de entrada e porta de escuta do servidor
     address.sin_family = AF_INET;
