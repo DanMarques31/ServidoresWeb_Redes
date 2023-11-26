@@ -24,7 +24,7 @@ void enviar_resposta(int socket_cliente, const char *conteudo, size_t tamanho, c
 const char *obter_tipo_mime(const char *caminho);
 void lidar_com_requisicao(int socket_cliente, const char *caminho);
 void *lidar_com_requisicaoTHREADS(void *arg);
-void reutilizaPorta(socket_server);
+void reutilizaPorta(int socket_server);
 
 // Estrutura para representar uma tarefa
 typedef struct {
