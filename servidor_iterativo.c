@@ -51,18 +51,18 @@ int main() {
 
         buffer[bytes_lidos] = '\0';
 
-        char caminho[TAMANHO_BUFFER];
-        if (sscanf(buffer, "GET %s", caminho) == 1) {
+        char diretorio[TAMANHO_BUFFER];
+        if (sscanf(buffer, "GET %s", diretorio) == 1) {
 
             // Imprime o cabeçalho HTTP da requisição
-            printf("Requisição recebida: %s %s\n", "GET", caminho);
+            printf("Requisição recebida: %s %s\n", "GET", diretorio);
 
-            // Lida com a requisição com base no caminho
-            lidar_com_requisicao(socket_cliente, caminho + 1);  // Ignora a barra inicial no caminho
+            // Lida com a requisição com base no diretório
+            lidar_com_requisicao(socket_cliente, diretorio + 1);  // Ignora a barra inicial no diretório
         } 
         
         else {
-            // Requisição inválida
+            // Requisição inválida ai retorna número de erro do cliente 
             const char *mensagem = "400 Bad Request";
             enviar_resposta(socket_cliente, mensagem, strlen(mensagem), "text/plain");
         }
