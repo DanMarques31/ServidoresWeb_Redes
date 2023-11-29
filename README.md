@@ -9,14 +9,24 @@ Compilação:
   A compilação tem duas maneiras de ser feita:
   
   1a maneira - Usuário digita "make" no terminal, dessa maneira compilando todos os arquivos (ignorar os warnings)
-  2a - compilar um a um com o make - make servidor_iterativo
+  2a - compilar um a um com o make: 
+                                    
+                                     make servidor_iterativo
+                                     
                                      make servidor_fork
+                                     
                                      make servidor_threads
+                                     
                                      make servidor_select
 
 Execução:
 
-  O usuário deverá digitar ./servidor_iterativo
+  O usuário deverá digitar o comando correspondente ao servidor que deseja executar:
+
+                           ./servidor_iterativo
+
                            ./servidor_fork
+
                            ./servidor_threads
+
                            ./servidor_select
